@@ -112,9 +112,9 @@ flask-rag/
 - Word-level evaluation
 
 ### Data Storage
-- SQLite database for chat history
-- File-based storage for documents
-- Vector store for embeddings
+- SQLite database for chat history (located at `data/chat.db`)
+- File-based storage for documents (in `data/documents/`)
+- Vector store for embeddings (in `data/vector_store/`)
 
 ## Dependencies
 

@@ -9,11 +9,10 @@ class Config:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     
     # Flask Configuration
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key')
+    # SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key') # enable this if later on session is needed
     DEBUG = os.environ.get('FLASK_DEBUG', True)
     
     # API Keys
-    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
     GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
     
     # Vector Store and Document Storage
