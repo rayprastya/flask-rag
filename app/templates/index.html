@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .recording {
+            animation: pulse 1s infinite;
+            background-color: #ef4444 !important;
+        }
+        .metrics-card {
+            transition: all 0.3s ease;
+        }
+        .metrics-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        /* Typing indicator animation */
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 4px 8px;
+        }
+        .typing-indicator span {
+            width: 6px;
+            height: 6px;
+            background-color: #93c5fd;
+            border-radius: 50%;
+            animation: typing 1s infinite;
+        }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-64 bg-white shadow-lg">
+            <div class="p-4 border-b">
+                <button id="newChatBtn" class="w-full bg-blue-500 text-white rounded-lg px-4 py-2 hover:bg-blue-600">
+                    New Chat
+                </button>
+            </div>
+            <div class="overflow-y-auto h-[calc(100vh-5rem)]" id="roomsList">
+                {% for room in rooms %}
+                <div class="room-item p-3 hover:bg-gray-100 cursor-pointer border-b" data-room-id="{{ room.id }}">
+                    <div class="flex items-center">
+                        <i class="fas {% if room.has_file %}fa-file-pdf{% else %}fa-comments{% endif %} mr-2"></i>
+                        <span>{{ room.name }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="flex-1 flex flex-col">
+            <!-- Chat Header -->
+            <div class="bg-white shadow p-4 flex items-center">
+                <h1 id="currentRoomName" class="text-xl font-semibold">Select a chat room</h1>
+                <div class="ml-auto">
+                    <label for="fileUpload" class="bg-green-500 text-white rounded-lg px-4 py-2 hover:bg-green-600 cursor-pointer">
+                        <i class="fas fa-upload mr-2"></i>Upload Document
+                    </label>
+                    <input type="file" id="fileUpload" class="hidden" accept=".pdf">
+                </div>
+            </div>
+
+            <!-- Messages Area -->
+            <div class="flex-1 overflow-y-auto p-4 bg-gray-50" id="messagesArea">
+                <div class="flex flex-col space-y-4">
+                    <!-- Messages will be inserted here -->
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="bg-white border-t p-4">
+                <div class="flex space-x-4">
+                    <input type="text" id="messageInput" class="flex-1 border rounded-lg px-4 py-2" placeholder="Type your message...">
+                    <button id="micBtn" class="bg-blue-500 text-white rounded-lg px-4 py-2 hover:bg-blue-600">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                    <button id="sendBtn" class="bg-blue-500 text-white rounded-lg px-6 py-2 hover:bg-blue-600">
+                        Send
+                    </button>
+                </div>
+                
+                <!-- Speech Metrics Display -->
+                <div id="speechMetrics" class="hidden mt-4 p-4 bg-gray-50 rounded-lg">
+                    <h3 class="text-lg font-semibold mb-3">Speech Analysis</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="metrics-card bg-white p-4 rounded-lg shadow">
+                            <div class="text-sm text-gray-500">Accuracy</div>
+                            <div id="accuracyScore" class="text-2xl font-bold text-blue-600">-</div>
+                        </div>
+                        <div class="metrics-card bg-white p-4 rounded-lg shadow">
+                            <div class="text-sm text-gray-500">Fluency</div>
+                            <div id="fluencyScore" class="text-2xl font-bold text-green-600">-</div>
+                        </div>
+                        <div class="metrics-card bg-white p-4 rounded-lg shadow">
+                            <div class="text-sm text-gray-500">Pronunciation</div>
+                            <div id="pronunciationScore" class="text-2xl font-bold text-purple-600">-</div>
+                        </div>
+                        <div class="metrics-card bg-white p-4 rounded-lg shadow">
+                            <div class="text-sm text-gray-500">Overall Quality</div>
+                            <div id="qualityScore" class="text-2xl font-bold text-indigo-600">-</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Word-by-word Analysis -->
+                    <div class="mt-4">
+                        <h4 class="font-semibold mb-2">Word Analysis</h4>
+                        <div id="wordAnalysis" class="bg-white p-3 rounded-lg shadow max-h-40 overflow-y-auto">
+                            <!-- Word analysis will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Chat Modal -->
+    <div id="newChatModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white rounded-lg p-6 w-96">
+            <h2 class="text-xl font-semibold mb-4">Create New Chat</h2>
+            <input type="text" id="newChatName" class="w-full border rounded-lg px-4 py-2 mb-4" placeholder="Chat name">
+            <div class="flex justify-end space-x-4">
+                <button id="cancelNewChat" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
+                <button id="createNewChat" class="bg-blue-500 text-white rounded-lg px-4 py-2 hover:bg-blue-600">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentRoomId = null;
+
+        // Room selection
+        document.querySelectorAll('.room-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const roomId = parseInt(item.dataset.roomId);
+                selectRoom(roomId);
+            });
+        });
+
+        // New chat modal
+        const newChatBtn = document.getElementById('newChatBtn');
+        const newChatModal = document.getElementById('newChatModal');
+        const cancelNewChat = document.getElementById('cancelNewChat');
+        const createNewChat = document.getElementById('createNewChat');
+        const newChatName = document.getElementById('newChatName');
+
+        newChatBtn.addEventListener('click', () => {
+            newChatModal.classList.remove('hidden');
+        });
+
+        cancelNewChat.addEventListener('click', () => {
+            newChatModal.classList.add('hidden');
+            newChatName.value = '';
+        });
+
+        createNewChat.addEventListener('click', async () => {
+            const name = newChatName.value.trim() || `Chat ${new Date().toLocaleString()}`;
+            const response = await fetch('/api/rooms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            const room = await response.json();
+            addRoomToList(room);
+            newChatModal.classList.add('hidden');
+            newChatName.value = '';
+            selectRoom(room.id);
+        });
+
+        // File upload
+        document.getElementById('fileUpload').addEventListener('change', async (e) => {
+            if (!currentRoomId) {
+                alert('Please select a chat room first');
+                return;
+            }
+
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`/api/rooms/${currentRoomId}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    addMessage('System', result.message);
+                    // Refresh the room list to show the file icon
+                    const roomsResponse = await fetch('/api/rooms');
+                    const rooms = await roomsResponse.json();
+                    const room = rooms.find(r => r.id === currentRoomId);
+                    if (room) {
+                        const roomElement = document.querySelector(`[data-room-id="${currentRoomId}"]`);
+                        roomElement.querySelector('i').className = 'fas fa-file-pdf mr-2';
+                    }
+                } else {
+                    throw new Error('Upload failed');
+                }
+            } catch (error) {
+                console.error('Error uploading file:', error);
+                addMessage('System', 'Error uploading file');
+            }
+        });
+
+        // Chat functionality
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        async function sendMessage() {
+            if (!currentRoomId) {
+                alert('Please select a chat room first');
+                return;
+            }
+
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            addMessage('user', message);
+            messageInput.value = '';
+            
+            // Add typing indicator
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'flex justify-start';
+            loadingDiv.innerHTML = `
+                <div class="max-w-[70%] rounded-lg p-3 bg-white shadow">
+                    <div class="typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            `;
+            document.getElementById('messagesArea').appendChild(loadingDiv);
+
+            try {
+                const response = await fetch(`/api/rooms/${currentRoomId}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+
+                const data = await response.json();
+                // Remove typing indicator
+                loadingDiv.remove();
+                addMessage('assistant', data.content, data.context);
+            } catch (error) {
+                // Remove typing indicator and show error
+                loadingDiv.remove();
+                addMessage('system', 'Error: Could not get response from the bot');
+            }
+        }
+
+        function addMessage(role, content, context = null) {
+            const messagesArea = document.getElementById('messagesArea');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+
+            const messageBubble = document.createElement('div');
+            messageBubble.className = `max-w-[70%] rounded-lg p-3 ${
+                role === 'user' ? 'bg-blue-500 text-white' : 'bg-white shadow'
+            }`;
+
+            messageBubble.textContent = content;
+
+            if (context && context.passages) {
+                const sourcesDiv = document.createElement('div');
+                sourcesDiv.className = 'mt-2 text-sm text-gray-500';
+                sourcesDiv.innerHTML = '<strong>Sources:</strong><br>' + 
+                    context.passages.map((p, i) => 
+                        `[${(context.metadata[i].relevance_score * 100).toFixed(1)}%] ${p.substring(0, 100)}...`
+                    ).join('<br>');
+                messageBubble.appendChild(sourcesDiv);
+            }
+
+            messageDiv.appendChild(messageBubble);
+            messagesArea.appendChild(messageDiv);
+            messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+
+        async function selectRoom(roomId) {
+            currentRoomId = roomId;
+            
+            // Update UI
+            document.querySelectorAll('.room-item').forEach(item => {
+                item.classList.toggle('bg-gray-100', item.dataset.roomId === roomId.toString());
+            });
+
+            // Clear messages
+            const messagesArea = document.getElementById('messagesArea');
+            messagesArea.innerHTML = '';
+
+            // Load messages
+            const response = await fetch(`/api/rooms/${roomId}/messages`);
+            const messages = await response.json();
+            messages.forEach(msg => addMessage(msg.role, msg.content, msg.context));
+
+            // Update room name
+            const room = document.querySelector(`.room-item[data-room-id="${roomId}"]`);
+            document.getElementById('currentRoomName').textContent = room.querySelector('span').textContent;
+        }
+
+        function addRoomToList(room) {
+            const roomsList = document.getElementById('roomsList');
+            const roomDiv = document.createElement('div');
+            roomDiv.className = 'room-item p-3 hover:bg-gray-100 cursor-pointer border-b';
+            roomDiv.dataset.roomId = room.id;
+            
+            roomDiv.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <i class="fas ${room.has_file ? 'fa-file-pdf' : 'fa-comments'} mr-2"></i>
+                        <span>${room.name}</span>
+                    </div>
+                    <button class="delete-room text-red-500 hover:text-red-700">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+
+            // Add click handlers
+            roomDiv.querySelector('.delete-room').addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (confirm('Are you sure you want to delete this chat room?')) {
+                    await deleteRoom(room.id);
+                    roomDiv.remove();
+                    if (currentRoomId === room.id) {
+                        currentRoomId = null;
+                        document.getElementById('currentRoomName').textContent = 'Select a chat room';
+                        document.getElementById('messagesArea').innerHTML = '';
+                    }
+                }
+            });
+
+            roomDiv.addEventListener('click', () => selectRoom(room.id));
+            roomsList.appendChild(roomDiv);
+        }
+
+        // Add delete room function
+        async function deleteRoom(roomId) {
+            try {
+                const response = await fetch(`/api/rooms/${roomId}`, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) {
+                    throw new Error('Failed to delete room');
+                }
+            } catch (error) {
+                console.error('Error deleting room:', error);
+                alert('Failed to delete room');
+            }
+        }
+
+        // Voice Chat Functionality
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        const micBtn = document.getElementById('micBtn');
+
+        // Request microphone permissions
+        async function setupMicrophone() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        channelCount: 1,
+                        sampleRate: 16000,
+                        sampleSize: 16,
+                        volume: 1.0
+                    }
+                });
+                
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm',
+                    audioBitsPerSecond: 16000
+                });
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    // Convert audio chunks to WAV format
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    await sendVoiceMessage(audioBlob);
+                    audioChunks = [];
+                };
+                
+                return true;
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                return false;
+            }
+        }
+
+        // Handle microphone button click
+        micBtn.addEventListener('click', async () => {
+            if (!currentRoomId) {
+                alert('Please select a chat room first');
+                return;
+            }
+
+            if (!mediaRecorder) {
+                const setup = await setupMicrophone();
+                if (!setup) {
+                    alert('Could not access microphone');
+                    return;
+                }
+            }
+
+            if (!isRecording) {
+                // Start recording
+                audioChunks = [];
+                mediaRecorder.start();
+                isRecording = true;
+                micBtn.classList.add('recording');
+                micBtn.innerHTML = '<i class="fas fa-stop"></i>';
+            } else {
+                // Stop recording
+                mediaRecorder.stop();
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+            }
+        });
+
+        // Send voice message to server
+        async function sendVoiceMessage(audioBlob) {
+            try {
+                // Convert audio to WAV format
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 16000
+                });
+                
+                // Convert blob to array buffer
+                const arrayBuffer = await audioBlob.arrayBuffer();
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                
+                // Create WAV file
+                const wavBuffer = audioBufferToWav(audioBuffer);
+                const wavBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+                
+                // Convert to base64
+                const reader = new FileReader();
+                reader.readAsDataURL(wavBlob);
+                
+                reader.onloadend = async () => {
+                    const base64Audio = reader.result.split(',')[1];
+                    
+                    // Add typing indicator
+                    const loadingDiv = document.createElement('div');
+                    loadingDiv.className = 'flex justify-start';
+                    loadingDiv.innerHTML = `
+                        <div class="max-w-[70%] rounded-lg p-3 bg-white shadow">
+                            <div class="typing-indicator">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('messagesArea').appendChild(loadingDiv);
+                    
+                    try {
+                        const response = await fetch(`/api/rooms/${currentRoomId}/voice_chat`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ audio: base64Audio })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        // Remove typing indicator
+                        loadingDiv.remove();
+                        
+                        if (!response.ok) {
+                            const errorMessage = data.details 
+                                ? `${data.error}\n${data.details}`
+                                : data.error || 'Error processing voice message';
+                            
+                            addMessage('system', errorMessage);
+                            document.getElementById('speechMetrics').classList.add('hidden');
+                            return;
+                        }
+                        
+                        // Add user's transcribed message
+                        addMessage('user', data.transcription || data.content);
+                        
+                        // Update speech metrics
+                        updateSpeechMetrics(data.speech_metrics);
+                        
+                        // Create response message container
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = 'flex justify-start';
+                        
+                        const messageBubble = document.createElement('div');
+                        messageBubble.className = 'max-w-[70%] rounded-lg p-3 bg-white shadow';
+                        
+                        // Create content container with flex layout
+                        const contentContainer = document.createElement('div');
+                        contentContainer.className = 'flex items-start gap-2';
+                        
+                        // Add text response
+                        const textContainer = document.createElement('div');
+                        textContainer.className = 'flex-grow';
+                        textContainer.textContent = data.response || data.content;
+                        contentContainer.appendChild(textContainer);
+                        
+                        // Add audio control if response audio is available
+                        if (data.audio) {
+                            const audioContainer = document.createElement('div');
+                            audioContainer.className = 'flex-shrink-0 flex items-center';
+                            
+                            const playButton = document.createElement('button');
+                            playButton.className = 'bg-blue-500 hover:bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center transition-colors';
+                            playButton.innerHTML = '<i class="fas fa-play"></i>';
+                            
+                            const audio = new Audio('data:audio/wav;base64,' + data.audio);
+                            let isPlaying = false;
+                            
+                            playButton.addEventListener('click', () => {
+                                if (isPlaying) {
+                                    audio.pause();
+                                    audio.currentTime = 0;
+                                    playButton.innerHTML = '<i class="fas fa-play"></i>';
+                                } else {
+                                    // Stop all other playing audio elements
+                                    document.querySelectorAll('audio').forEach(a => {
+                                        a.pause();
+                                        a.currentTime = 0;
+                                    });
+                                    // Reset all other play buttons
+                                    document.querySelectorAll('.audio-play-btn').forEach(btn => {
+                                        btn.innerHTML = '<i class="fas fa-play"></i>';
+                                        btn.dataset.playing = 'false';
+                                    });
+                                    
+                                    audio.play();
+                                    playButton.innerHTML = '<i class="fas fa-stop"></i>';
+                                }
+                                isPlaying = !isPlaying;
+                            });
+                            
+                            // Add class for easy selection
+                            playButton.classList.add('audio-play-btn');
+                            playButton.dataset.playing = 'false';
+                            
+                            // Reset button when audio ends
+                            audio.addEventListener('ended', () => {
+                                isPlaying = false;
+                                playButton.innerHTML = '<i class="fas fa-play"></i>';
+                                playButton.dataset.playing = 'false';
+                            });
+                            
+                            audioContainer.appendChild(playButton);
+                            contentContainer.appendChild(audioContainer);
+                        }
+                        
+                        messageBubble.appendChild(contentContainer);
+                        
+                        // Add context if available
+                        if (data.context && data.context.passages) {
+                            const sourcesDiv = document.createElement('div');
+                            sourcesDiv.className = 'mt-2 text-sm text-gray-500';
+                            sourcesDiv.innerHTML = '<strong>Sources:</strong><br>' + 
+                                data.context.passages.map((p, i) => 
+                                    `[${(data.context.metadata[i].relevance_score * 100).toFixed(1)}%] ${p.substring(0, 100)}...`
+                                ).join('<br>');
+                            messageBubble.appendChild(sourcesDiv);
+                        }
+                        
+                        messageDiv.appendChild(messageBubble);
+                        messagesArea.appendChild(messageDiv);
+                        messagesArea.scrollTop = messagesArea.scrollHeight;
+                    } catch (error) {
+                        console.error('Error sending voice message:', error);
+                        addMessage('system', 'Error processing voice message. Please try again.');
+                        document.getElementById('speechMetrics').classList.add('hidden');
+                    }
+                };
+            } catch (error) {
+                console.error('Error preparing voice message:', error);
+                addMessage('system', 'Error preparing voice message. Please try again.');
+                document.getElementById('speechMetrics').classList.add('hidden');
+            }
+        }
+
+        // Helper function to convert AudioBuffer to WAV format
+        function audioBufferToWav(buffer) {
+            const numChannels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const format = 1; // PCM
+            const bitDepth = 16;
+            
+            const bytesPerSample = bitDepth / 8;
+            const blockAlign = numChannels * bytesPerSample;
+            
+            const wav = new ArrayBuffer(44 + buffer.length * bytesPerSample);
+            const view = new DataView(wav);
+            
+            // Write WAV header
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + buffer.length * bytesPerSample, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, format, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * blockAlign, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitDepth, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, buffer.length * bytesPerSample, true);
+            
+            // Write audio data
+            const offset = 44;
+            const data = new Float32Array(buffer.length);
+            buffer.copyFromChannel(data, 0);
+            
+            for (let i = 0; i < data.length; i++) {
+                const sample = Math.max(-1, Math.min(1, data[i]));
+                view.setInt16(offset + i * bytesPerSample, sample * 0x7FFF, true);
+            }
+            
+            return wav;
+        }
+
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+
+        // Update speech metrics display
+        function updateSpeechMetrics(metrics) {
+            const speechMetrics = document.getElementById('speechMetrics');
+            
+            // Don't show metrics if they're not available
+            if (!metrics) {
+                speechMetrics.classList.add('hidden');
+                return;
+            }
+            
+            speechMetrics.classList.remove('hidden');
+
+            // Update score displays
+            document.getElementById('accuracyScore').textContent = metrics.accuracy + '%';
+            document.getElementById('fluencyScore').textContent = metrics.fluency + '%';
+            document.getElementById('pronunciationScore').textContent = metrics.pronunciation_accuracy + '%';
+            document.getElementById('qualityScore').textContent = metrics.speech_quality + '%';
+
+            // Update word analysis
+            const wordAnalysis = document.getElementById('wordAnalysis');
+            wordAnalysis.innerHTML = '';
+
+            // Add word evaluations
+            if (metrics.word_evaluation && metrics.word_evaluation.length > 0) {
+                metrics.word_evaluation.forEach(evaluation => {
+                    const wordDiv = document.createElement('div');
+                    wordDiv.className = 'mb-2 p-2 rounded ' + 
+                        (evaluation.includes('error type: None') ? 'bg-green-50' : 'bg-red-50');
+                    wordDiv.textContent = evaluation;
+                    wordAnalysis.appendChild(wordDiv);
+                });
+            }
+
+            // Add pitch analysis if available
+            if (metrics.pitch_analysis && metrics.pitch_analysis.length > 0) {
+                const pitchTitle = document.createElement('div');
+                pitchTitle.className = 'font-semibold mt-3 mb-2';
+                pitchTitle.textContent = 'Pitch Analysis';
+                wordAnalysis.appendChild(pitchTitle);
+
+                metrics.pitch_analysis.forEach(pitch => {
+                    const pitchDiv = document.createElement('div');
+                    pitchDiv.className = 'text-sm text-gray-600 mb-1';
+                    pitchDiv.textContent = pitch;
+                    wordAnalysis.appendChild(pitchDiv);
+                });
+            }
+        }
+    </script>
+</body>
+</html>
