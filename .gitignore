@@ -35,9 +35,10 @@ env/
 data/
 *.db
 .env
+rag-content/
+**/rag-content/
+.DS_Store
+**/stellar-smoke-*.json
 
 # Logs
 *.log 
-
-# MacOS
-.DS_Store
