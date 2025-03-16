@@ -38,3 +38,6 @@ data/
 
 # Logs
 *.log 
+
+# MacOS
+.DS_Store
