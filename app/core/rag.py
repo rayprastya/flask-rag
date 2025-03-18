@@ -149,7 +149,7 @@ def get_relevant_passage(query: str, db: chromadb.Collection, n_results: int = 3
     metadatas = results['metadatas'][0]
     distances = results['distances'][0]
     
-    # Improved scoring
+    # Improved scoring with more sophisticated metrics
     max_dist = max(distances)
     min_dist = min(distances)
     dist_range = max_dist - min_dist
@@ -160,15 +160,25 @@ def get_relevant_passage(query: str, db: chromadb.Collection, n_results: int = 3
         norm_dist = (dist - min_dist) / dist_range if dist_range > 0 else 1.0
         similarity = 1.0 - (norm_dist * 0.7)
         
-        # Additional scoring factors
+        # Enhanced scoring factors
         chunk_position = meta.get('chunk_index', 0) / meta.get('total_chunks', 1)
         recency_score = 0.1  # Base score for all results
         
-        # Combined score
+        # Length factor - prefer longer, more complete chunks
+        length_factor = min(1.0, len(doc.split()) / 100)  # Normalize to 0-1
+        
+        # Keyword overlap score
+        query_words = set(query.split())
+        doc_words = set(doc.lower().split())
+        overlap_score = len(query_words & doc_words) / len(query_words) if query_words else 0
+        
+        # Combined score with weighted factors
         final_score = (
-            similarity * 0.6 +  # Similarity is most important
-            (1 - chunk_position) * 0.3 +  # Earlier chunks slightly preferred
-            recency_score * 0.1  # Small boost for recency
+            similarity * 0.4 +           # Similarity is important but not everything
+            (1 - chunk_position) * 0.2 +  # Earlier chunks slightly preferred
+            recency_score * 0.1 +         # Small boost for recency
+            length_factor * 0.15 +        # Preference for complete chunks
+            overlap_score * 0.15          # Direct keyword matching
         )
         
         meta['relevance_score'] = final_score
@@ -242,10 +252,23 @@ def generate_gemini_answer(prompt: str, chat_history: List[Dict[str, Any]] = Non
         # Start a new chat
         chat = model.start_chat()
         
-        # Add system message
-        chat.send_message("""You are a helpful AI assistant with access to specific documents.
-        Please provide comprehensive answers based on the provided context.
-        Use a friendly and conversational tone, and break down complex concepts.""")
+        # Enhanced system message with better structure and guidelines
+        chat.send_message("""You are an expert AI assistant with deep knowledge and analytical capabilities.
+        Your responses should be:
+        1. Clear and concise - Get straight to the point
+        2. Well-structured - Use bullet points or numbered lists when appropriate
+        3. Evidence-based - Support your answers with specific details
+        4. Professional yet friendly - Maintain a helpful tone
+        5. Actionable - Provide practical next steps when relevant
+        
+        When answering questions:
+        - Break down complex topics into digestible parts
+        - Use examples to illustrate points
+        - Acknowledge limitations or uncertainties
+        - Ask clarifying questions if needed
+        - Provide context for your answers
+        
+        If you're not sure about something, say so rather than making assumptions.""")
         
         # Add chat history if provided
         if chat_history:
@@ -269,17 +292,31 @@ def generate_answer(db: chromadb.Collection, query: str, chat_history: List[Dict
     # Get relevant passages and metadata
     relevant_passages, metadata = get_relevant_passage(query, db, n_results=3)
     
-    # Create prompt with chat history
-    prompt = make_rag_prompt(query, relevant_passages, metadata, chat_history)
+    # Create prompt with chat history and better structure
+    prompt = f"""Based on the following context and question, provide a comprehensive answer:
+
+Question: {query}
+
+Context:
+{chr(10).join(f"- {passage}" for passage in relevant_passages)}
+
+Please structure your response as follows:
+1. Direct Answer: Provide a clear, concise answer to the question
+2. Supporting Evidence: Reference specific details from the context
+3. Additional Insights: Share any relevant analysis or implications
+4. Next Steps: Suggest any follow-up actions or questions if applicable
+
+If the context doesn't fully answer the question, please acknowledge this and suggest what additional information might be needed."""
     
     # Generate answer
     answer = generate_gemini_answer(prompt, chat_history)
     
-    # Return comprehensive response
+    # Return comprehensive response with confidence scores
     return {
         "answer": answer,
         "supporting_info": {
             "passages": relevant_passages,
-            "metadata": metadata
+            "metadata": metadata,
+            "confidence_scores": [meta.get('relevance_score', 0) for meta in metadata]
         }
     }
