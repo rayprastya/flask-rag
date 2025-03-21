@@ -122,7 +122,6 @@ def recognize_from_microphone(filename):
 
         if response.results:
             recognized_text = response.results[0].alternatives[0].transcript
-            print("Recognized text:", recognized_text)
             return recognized_text
         else:
             print("No speech could be recognized")

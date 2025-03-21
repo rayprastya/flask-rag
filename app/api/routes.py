@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 import os
+from app.core.helper import generateBriefResponse, generateFeedback, parseBotResponse
 from datetime import datetime
 from app.core.file_extractor import load_pdf, split_text
 from app.core.rag import create_chroma_db, load_chroma_collection, generate_answer
@@ -258,6 +259,7 @@ Consider the conversation history and maintain context in your response.""")
         )
         
         return jsonify({
+            'transcription': response.content,
             'content': response.content,
             'role': response.role,
             'timestamp': response.timestamp.isoformat(),
@@ -267,9 +269,11 @@ Consider the conversation history and maintain context in your response.""")
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
 @api.route('/rooms/<int:room_id>/voice_chat', methods=['POST'])
 def voice_chat(room_id):
     temp_audio_path = None
+    temp_wav_path = None
     response_audio_path = None
     
     try:
@@ -287,15 +291,34 @@ def voice_chat(room_id):
         except Exception as e:
             return jsonify({'error': 'Invalid audio data format'}), 400
 
-        # Save initial audio to temporary file
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_audio:
+        # Save initial audio to temporary file (WebM)
+        with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as temp_audio:
             temp_audio.write(audio_data)
             temp_audio_path = temp_audio.name
+
+        # Convert WebM to WAV using ffmpeg
+        try:
+            import subprocess
+            temp_wav_path = temp_audio_path.replace('.webm', '.wav')
+            subprocess.run([
+                'ffmpeg', '-i', temp_audio_path,
+                '-acodec', 'pcm_s16le',
+                '-ar', '16000',
+                '-ac', '1',
+                temp_wav_path
+            ], check=True, capture_output=True)
+        except subprocess.CalledProcessError as e:
+            return jsonify({
+                'error': 'Failed to convert audio format',
+                'details': str(e.stderr)
+            }), 500
 
         # Get the transcribed text from audio
         try:
             from app.core.stt import recognize_from_microphone
-            transcribed_text = recognize_from_microphone(temp_audio_path)
+            transcribed_text = recognize_from_microphone(temp_wav_path)
+
+            print("transcribed_text", transcribed_text)
             
             if not transcribed_text:
                 return jsonify({
@@ -312,7 +335,7 @@ def voice_chat(room_id):
         # Get pronunciation assessment
         try:
             accuracy_score, completeness_score, fluency_score, word_evaluation, final_words = \
-                pronunciation_assessment_from_microphone('en-US', transcribed_text, temp_audio_path)
+                pronunciation_assessment_from_microphone('en-US', transcribed_text, temp_wav_path)
         except Exception as e:
             print(f"Pronunciation assessment error: {str(e)}")
             # Provide default values if pronunciation assessment fails
@@ -323,7 +346,7 @@ def voice_chat(room_id):
         # Get pitch analysis
         input_words = transcribed_text.split()
         try:
-            per_word_pitch, overall_pitch = pitch(input_words, temp_audio_path)
+            per_word_pitch, overall_pitch = pitch(input_words, temp_wav_path)
         except Exception as e:
             print(f"Pitch analysis error: {str(e)}")
             per_word_pitch = [f"{word}: N/A" for word in input_words]
@@ -390,9 +413,52 @@ Speech metrics:
 - Pronunciation: {round(correct_pronunciation_percentage, 2)}%
 - Overall Quality: {round(speech_quality, 2)}%
 
-Please provide feedback on their English speaking skills and answer their question.""")
+Please provide feedback on their English speaking skills and answer their question in brief response. Format your response in HTML with the following structure:
+
+<div class="feedback-section">
+    <h3 class="text-lg font-semibold mb-2">Speech Analysis</h3>
+    <div class="grid grid-cols-2 gap-2 mb-4">
+        <div class="bg-gray-50 p-2 rounded">
+            <div class="text-sm text-gray-500">Accuracy</div>
+            <div class="text-lg font-bold text-blue-600">{round(accuracy_score, 2)}%</div>
+        </div>
+        <div class="bg-gray-50 p-2 rounded">
+            <div class="text-sm text-gray-500">Fluency</div>
+            <div class="text-lg font-bold text-green-600">{round(fluency_score, 2)}%</div>
+        </div>
+        <div class="bg-gray-50 p-2 rounded">
+            <div class="text-sm text-gray-500">Pronunciation</div>
+            <div class="text-lg font-bold text-purple-600">{round(correct_pronunciation_percentage, 2)}%</div>
+        </div>
+        <div class="bg-gray-50 p-2 rounded">
+            <div class="text-sm text-gray-500">Overall Quality</div>
+            <div class="text-lg font-bold text-indigo-600">{round(speech_quality, 2)}%</div>
+        </div>
+    </div>
+    <div class="word-analysis bg-white p-3 rounded-lg shadow max-h-40 overflow-y-auto mb-4">
+        <h4 class="font-semibold mb-2">Word Analysis</h4>
+        {''.join([f'<div class="mb-2 p-2 rounded {("bg-green-50" if "error type: None" in eval else "bg-red-50")}">{eval}</div>' for eval in word_evaluation])}
+    </div>
+    <div class="feedback-content">
+        <h3 class="text-lg font-semibold mb-2">Feedback</h3>
+        <div class="prose">
+            {generateFeedback(accuracy_score, fluency_score, correct_pronunciation_percentage, speech_quality)}
+        </div>
+    </div>
+</div>
+
+<div class="brief-response-section">
+    <h3 class="text-lg font-semibold mb-2">Response</h3>
+    <div class="prose">
+        {generateBriefResponse(transcribed_text)}
+    </div>
+</div>
+
+Please ensure the response is concise and helpful, focusing on specific improvements when needed.
+""")
             
             response_content = response.text
+            print("res", response_content)
             context = {
                 'conversation_history': chat_history,
                 'current_query': {
@@ -405,7 +471,8 @@ Please provide feedback on their English speaking skills and answer their questi
         try:
             from app.core.tts import text_to_speech
             response_audio_path = os.path.join(tempfile.gettempdir(), f'response_{datetime.now().timestamp()}.wav')
-            text_to_speech('en-US-Standard-C', response_content, response_audio_path)
+            text_for_speech = parseBotResponse(response_content)
+            text_to_speech('en-US-Standard-C', text_for_speech, response_audio_path)
 
             # Read response audio file and convert to base64
             with open(response_audio_path, 'rb') as audio_file:
@@ -423,6 +490,7 @@ Please provide feedback on their English speaking skills and answer their questi
         )
 
         result = {
+            'transcription': transcribed_text,
             'content': response.content,
             'role': response.role,
             'timestamp': response.timestamp.isoformat(),
@@ -438,6 +506,8 @@ Please provide feedback on their English speaking skills and answer their questi
                 'overall_pitch': round(overall_pitch, 2)
             }
         }
+
+        print("result", result)
         
         if response_audio:
             result['response_audio'] = response_audio
@@ -453,6 +523,11 @@ Please provide feedback on their English speaking skills and answer their questi
         if temp_audio_path and os.path.exists(temp_audio_path):
             try:
                 os.unlink(temp_audio_path)
+            except:
+                pass
+        if temp_wav_path and os.path.exists(temp_wav_path):
+            try:
+                os.unlink(temp_wav_path)
             except:
                 pass
         if response_audio_path and os.path.exists(response_audio_path):
