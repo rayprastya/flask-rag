@@ -18,6 +18,21 @@ A Flask-based chat application that combines Retrieval-Augmented Generation (RAG
   - RAG mode for document-based conversations
   - Regular chat mode with Gemini for general conversations
 
+## Prerequisites
+
+- Python 3.8 or higher
+- FFmpeg installed on your system
+  ```bash
+  # macOS
+  brew install ffmpeg
+  
+  # Ubuntu/Debian
+  sudo apt-get install ffmpeg
+  
+  # Windows
+  # Download from https://ffmpeg.org/download.html
+  ```
+
 ## Project Structure
 
 ```
@@ -40,8 +55,14 @@ flask-rag/
 │   │   └── js/
 │   └── templates/
 │       └── index.html        # Main application interface
-├── config.py                 # Configuration settings
-└── requirements.txt          # Python dependencies
+├── data/
+│   ├── documents/           # Uploaded PDF documents
+│   ├── vector_store/       # ChromaDB vector store
+│   └── chat.db            # SQLite database
+├── tests/                 # Unit tests
+├── config.py             # Configuration settings
+├── requirements.txt      # Python dependencies
+└── .env                 # Environment variables
 ```
 
 ## Setup Instructions
@@ -70,7 +91,12 @@ flask-rag/
    FLASK_DEBUG=True
    ```
 
-5. **Initialize the Application**
+5. **Create Required Directories**
+   ```bash
+   mkdir -p data/documents data/vector_store
+   ```
+
+6. **Initialize the Application**
    ```bash
    python app.py
    ```
@@ -98,6 +124,18 @@ flask-rag/
    - Receive detailed speech metrics
    - Get AI-generated pronunciation feedback
 
+## API Documentation
+
+### Endpoints
+
+- `POST /api/rooms` - Create a new chat room
+- `GET /api/rooms` - List all chat rooms
+- `GET /api/rooms/<room_id>` - Get room details
+- `DELETE /api/rooms/<room_id>` - Delete a chat room
+- `POST /api/rooms/<room_id>/chat` - Send a text message
+- `POST /api/rooms/<room_id>/voice_chat` - Send a voice message
+- `POST /api/rooms/<room_id>/upload` - Upload a document
+
 ## Technical Details
 
 ### RAG Implementation
@@ -124,10 +162,65 @@ flask-rag/
 - Gemini: Language model for chat
 - PyPDF2: PDF processing
 - SQLAlchemy: Database ORM
+- FFmpeg: Audio processing
+- Python-magic: File type validation
+- Requests: HTTP client
+- Pytest: Testing framework
+
+## Browser Compatibility
+
+- Chrome 80+
+- Firefox 75+
+- Safari 13.1+
+- Edge 80+
+
+## Troubleshooting
+
+1. **Microphone Access Issues**
+   - Ensure browser has microphone permissions
+   - Check system microphone settings
+   - Try using a different browser
+
+2. **Document Upload Failures**
+   - Verify PDF file is not corrupted
+   - Check file size (max 10MB)
+   - Ensure proper file permissions
+
+3. **Speech Recognition Errors**
+   - Check internet connection
+   - Verify Google API key is valid
+   - Ensure FFmpeg is installed
+
+4. **Database Issues**
+   - Check write permissions in data directory
+   - Verify SQLite is properly installed
+   - Try clearing browser cache
+
+## Development
+
+1. **Running Tests**
+   ```bash
+   pytest tests/
+   ```
+
+2. **Code Style**
+   - Follow PEP 8 guidelines
+   - Use type hints
+   - Document functions and classes
+
+3. **Adding Features**
+   - Create feature branch
+   - Write tests
+   - Update documentation
+   - Submit pull request
 
 ## Contributing
 
-Feel free to submit issues, fork the repository, and create pull requests for any improvements.
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
