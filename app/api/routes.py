@@ -292,20 +292,25 @@ def voice_chat(room_id):
             return jsonify({'error': 'Invalid audio data format'}), 400
 
         # Save initial audio to temporary file (WebM)
-        with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as temp_audio:
-            temp_audio.write(audio_data)
-            temp_audio_path = temp_audio.name
+        temp_audio_path = Config.TEMP_DIR / f'audio_{datetime.now().timestamp()}.webm'
+        temp_wav_path = Config.TEMP_DIR / f'audio_{datetime.now().timestamp()}.wav'
+        response_audio_path = Config.TEMP_DIR / f'response_{datetime.now().timestamp()}.wav'
+        
+        try:
+            with open(temp_audio_path, 'wb') as temp_audio:
+                temp_audio.write(audio_data)
+        except Exception as e:
+            return jsonify({'error': 'Failed to save audio file'}), 500
 
         # Convert WebM to WAV using ffmpeg
         try:
             import subprocess
-            temp_wav_path = temp_audio_path.replace('.webm', '.wav')
             subprocess.run([
-                'ffmpeg', '-i', temp_audio_path,
+                'ffmpeg', '-i', str(temp_audio_path),
                 '-acodec', 'pcm_s16le',
                 '-ar', '16000',
                 '-ac', '1',
-                temp_wav_path
+                str(temp_wav_path)
             ], check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
             return jsonify({
@@ -316,7 +321,7 @@ def voice_chat(room_id):
         # Get the transcribed text from audio
         try:
             from app.core.stt import recognize_from_microphone
-            transcribed_text = recognize_from_microphone(temp_wav_path)
+            transcribed_text = recognize_from_microphone(str(temp_wav_path))
 
             print("transcribed_text", transcribed_text)
             
@@ -335,7 +340,7 @@ def voice_chat(room_id):
         # Get pronunciation assessment
         try:
             accuracy_score, completeness_score, fluency_score, word_evaluation, final_words = \
-                pronunciation_assessment_from_microphone('en-US', transcribed_text, temp_wav_path)
+                pronunciation_assessment_from_microphone('en-US', transcribed_text, str(temp_wav_path))
         except Exception as e:
             print(f"Pronunciation assessment error: {str(e)}")
             # Provide default values if pronunciation assessment fails
@@ -346,7 +351,7 @@ def voice_chat(room_id):
         # Get pitch analysis
         input_words = transcribed_text.split()
         try:
-            per_word_pitch, overall_pitch = pitch(input_words, temp_wav_path)
+            per_word_pitch, overall_pitch = pitch(input_words, str(temp_wav_path))
         except Exception as e:
             print(f"Pitch analysis error: {str(e)}")
             per_word_pitch = [f"{word}: N/A" for word in input_words]
@@ -470,9 +475,8 @@ Please ensure the response is concise and helpful, focusing on specific improvem
         # Convert response to speech
         try:
             from app.core.tts import text_to_speech
-            response_audio_path = os.path.join(tempfile.gettempdir(), f'response_{datetime.now().timestamp()}.wav')
             text_for_speech = parseBotResponse(response_content)
-            text_to_speech('en-US-Standard-C', text_for_speech, response_audio_path)
+            text_to_speech('en-US-Standard-C', text_for_speech, str(response_audio_path))
 
             # Read response audio file and convert to base64
             with open(response_audio_path, 'rb') as audio_file:
