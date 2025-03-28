@@ -420,6 +420,13 @@ Speech metrics:
 
 Please provide feedback on their English speaking skills and answer their question in brief response. Format your response in HTML with the following structure:
 
+<div class="brief-response-section">
+    <h3 class="text-lg font-semibold mb-2">Response</h3>
+    <div class="prose">
+        {generateBriefResponse(transcribed_text)}
+    </div>
+</div>
+
 <div class="feedback-section">
     <h3 class="text-lg font-semibold mb-2">Speech Analysis</h3>
     <div class="grid grid-cols-2 gap-2 mb-4">
@@ -449,13 +456,6 @@ Please provide feedback on their English speaking skills and answer their questi
         <div class="prose">
             {generateFeedback(accuracy_score, fluency_score, correct_pronunciation_percentage, speech_quality)}
         </div>
-    </div>
-</div>
-
-<div class="brief-response-section">
-    <h3 class="text-lg font-semibold mb-2">Response</h3>
-    <div class="prose">
-        {generateBriefResponse(transcribed_text)}
     </div>
 </div>
 
