@@ -246,7 +246,7 @@ def generate_gemini_answer(prompt: str, chat_history: List[Dict[str, Any]] = Non
         raise ValueError("Gemini API Key not provided")
     
     genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.0-flash')
     
     try:
         # Start a new chat

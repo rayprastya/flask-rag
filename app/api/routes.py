@@ -224,14 +224,22 @@ def chat(room_id):
         else:
             # Use regular chat for rooms without documents
             # Format messages for Gemini
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.0-flash')
             chat = model.start_chat()
             
             # Add system message
-            chat.send_message("""You are a helpful AI assistant. 
-Please provide a friendly and informative response. 
-If the user asks about documents, let them know they can upload documents for more specific answers.
-Consider the conversation history and maintain context in your response.""")
+            chat.send_message("""You are a friendly and engaging English language tutor. 
+Your responses should be:
+1. Natural and conversational - like talking to a friend
+2. Warm and encouraging - always find something positive to say
+3. Specific and actionable - give clear, practical advice
+4. Brief but meaningful - keep responses concise but helpful
+5. Personal - use "you" and "your" to make it more engaging
+
+Remember to:
+- Start with a friendly greeting or acknowledgment
+- Use contractions (e.g., "you're" instead of "you are")
+- Keep the tone light and supportive""")
             
             # Add chat history
             for msg in chat_history:
@@ -402,11 +410,20 @@ def voice_chat(room_id):
                 'metadata': result['supporting_info']['metadata']
             }
         else:
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.0-flash')
             chat = model.start_chat()
-            chat.send_message("""You are a helpful English language tutor.
-Please provide feedback on the user's speech in addition to answering their question.
-Consider their fluency scores and pronunciation accuracy in your response.""")
+            chat.send_message("""You are a friendly and engaging English language tutor. 
+Your responses should be:
+1. Natural and conversational - like talking to a friend
+2. Warm and encouraging - always find something positive to say
+3. Specific and actionable - give clear, practical advice
+4. Brief but meaningful - keep responses concise but helpful
+5. Personal - use "you" and "your" to make it more engaging
+
+Remember to:
+- Start with a friendly greeting or acknowledgment
+- Use contractions (e.g., "you're" instead of "you are")
+- Keep the tone light and supportive""")
             
             for msg in chat_history:
                 chat.send_message(msg['content'])
@@ -418,7 +435,12 @@ Speech metrics:
 - Pronunciation: {round(correct_pronunciation_percentage, 2)}%
 - Overall Quality: {round(speech_quality, 2)}%
 
-Please provide feedback on their English speaking skills and answer their question in brief response. Format your response in HTML with the following structure:
+Please provide a friendly, conversational response that includes:
+1. A brief answer to their question
+2. Feedback on their English speaking skills
+3. Specific suggestions for improvement
+
+Format your response in HTML with the following structure:
 
 <div class="brief-response-section">
     <h3 class="text-lg font-semibold mb-2">Response</h3>
@@ -459,7 +481,7 @@ Please provide feedback on their English speaking skills and answer their questi
     </div>
 </div>
 
-Please ensure the response is concise and helpful, focusing on specific improvements when needed.
+Remember to keep the tone friendly and conversational throughout! 😊
 """)
             
             response_content = response.text
