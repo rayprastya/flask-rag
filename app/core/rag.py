@@ -74,42 +74,51 @@ def create_chroma_db(documents: List[str], path: str, name: str, batch_size: int
     Returns:
         Tuple of (ChromaDB collection, collection name)
     """
-    chroma_client = chromadb.PersistentClient(path=path)
-    
-    # Check if collection exists and delete if it does
     try:
-        chroma_client.delete_collection(name)
-    except:
-        pass
-        
-    # Create new collection with optimized settings
-    db = chroma_client.create_collection(
-        name=name,
-        embedding_function=GeminiEmbeddingFunction(),
-        metadata={"created_at": datetime.now().isoformat()}
-    )
-
-    # Process documents in batches
-    for i in range(0, len(documents), batch_size):
-        batch = documents[i:i + batch_size]
-        
-        # Prepare batch metadata
-        metadatas = [{
-            "chunk_id": str(i + j),
-            "chunk_index": i + j,
-            "total_chunks": len(documents),
-            "batch_number": i // batch_size,
-            "timestamp": datetime.now().isoformat()
-        } for j in range(len(batch))]
-        
-        # Add batch to collection
-        db.add(
-            documents=batch,
-            metadatas=metadatas,
-            ids=[f"chunk_{i + j}" for j in range(len(batch))]
+        print(path, name)
+        # Create a clean path without spaces
+        clean_path = str(path).strip()  # Remove any extra spaces
+        chroma_client = chromadb.PersistentClient(path=clean_path)
+    
+        # Check if collection exists and delete if it does
+        try:
+            chroma_client.delete_collection(name)
+        except:
+            pass
+            
+        # Create new collection with optimized settings
+        db = chroma_client.create_collection(
+            name=name.strip(),  # Ensure name has no extra spaces
+            embedding_function=GeminiEmbeddingFunction(),
+            metadata={"created_at": datetime.now().isoformat()}
         )
+        print("5")
 
-    return db, name
+        # Process documents in batches
+        for i in range(0, len(documents), batch_size):
+            batch = documents[i:i + batch_size]
+            
+            # Prepare batch metadata
+            metadatas = [{
+                "chunk_id": str(i + j),
+                "chunk_index": i + j,
+                "total_chunks": len(documents),
+                "batch_number": i // batch_size,
+                "timestamp": datetime.now().isoformat()
+            } for j in range(len(batch))]
+            
+            # Add batch to collection
+            db.add(
+                documents=batch,
+                metadatas=metadatas,
+                ids=[f"chunk_{str(i + j)}" for j in range(len(batch))]
+            )
+
+        return db, name
+    except Exception as e:
+        print(f'Error creating ChromaDB collection: {str(e)}')
+        return None, None
+
 
 def load_chroma_collection(path: str, name: str) -> chromadb.Collection:
     """

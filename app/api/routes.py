@@ -114,6 +114,7 @@ def upload(room_id):
         file.save(file_path)
         
         try:
+            print("1")
             # Process file for RAG - with status updates
             chat_manager.add_message(
                 room_id=room_id,
@@ -128,6 +129,7 @@ def upload(room_id):
                 chunk_size=500,  # Smaller chunks for faster processing
                 chunk_overlap=50  # Minimal overlap
             )
+            print("2")
             
             # Create ChromaDB collection with optimized settings
             collection_name = f"collection_{int(datetime.now().timestamp())}"
@@ -136,6 +138,8 @@ def upload(room_id):
                 path=Config.VECTOR_STORE_DIR,
                 name=collection_name
             )
+
+            print("2.1")
             
             # Update room with file context
             chat_manager.update_room(
@@ -143,6 +147,7 @@ def upload(room_id):
                 file_context=file_path,
                 collection_name=collection_name
             )
+            print("3")
             
             # Add success message
             chat_manager.add_message(
@@ -150,6 +155,8 @@ def upload(room_id):
                 content=f"Document processed successfully! You can now ask questions about {file.filename}",
                 role="system"
             )
+
+            print("4")
             
             return jsonify({
                 'message': 'File uploaded and processed successfully',
@@ -159,11 +166,13 @@ def upload(room_id):
             
         except Exception as e:
             # Clean up on error
+            print(e)
             if os.path.exists(file_path):
                 os.remove(file_path)
             raise e
             
     except Exception as e:
+        print(f'Error processing file: {str(e)}')
         return jsonify({
             'error': f'Error processing file: {str(e)}'
         }), 500
@@ -208,7 +217,7 @@ def chat(room_id):
         if room.collection_name:
             # Use RAG for rooms with documents
             db = load_chroma_collection(
-                path=Config.VECTOR_STORE_DIR,
+                path=str(Config.VECTOR_STORE_DIR),
                 name=room.collection_name
             )
             result = generate_answer(
@@ -300,9 +309,9 @@ def voice_chat(room_id):
             return jsonify({'error': 'Invalid audio data format'}), 400
 
         # Save initial audio to temporary file (WebM)
-        temp_audio_path = Config.TEMP_DIR / f'audio_{datetime.now().timestamp()}.webm'
-        temp_wav_path = Config.TEMP_DIR / f'audio_{datetime.now().timestamp()}.wav'
-        response_audio_path = Config.TEMP_DIR / f'response_{datetime.now().timestamp()}.wav'
+        temp_audio_path = str(Config.TEMP_DIR / f'audio_{datetime.now().timestamp()}.webm')
+        temp_wav_path = str(Config.TEMP_DIR / f'audio_{datetime.now().timestamp()}.wav')
+        response_audio_path = str(Config.TEMP_DIR / f'response_{datetime.now().timestamp()}.wav')
         
         try:
             with open(temp_audio_path, 'wb') as temp_audio:
@@ -314,11 +323,11 @@ def voice_chat(room_id):
         try:
             import subprocess
             subprocess.run([
-                'ffmpeg', '-i', str(temp_audio_path),
+                'ffmpeg', '-i', temp_audio_path,
                 '-acodec', 'pcm_s16le',
                 '-ar', '16000',
                 '-ac', '1',
-                str(temp_wav_path)
+                temp_wav_path
             ], check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
             return jsonify({
@@ -329,7 +338,7 @@ def voice_chat(room_id):
         # Get the transcribed text from audio
         try:
             from app.core.stt import recognize_from_microphone
-            transcribed_text = recognize_from_microphone(str(temp_wav_path))
+            transcribed_text = recognize_from_microphone(temp_wav_path)
 
             print("transcribed_text", transcribed_text)
             
@@ -402,7 +411,7 @@ def voice_chat(room_id):
 
         # Generate response using existing logic
         if room.collection_name:
-            db = load_chroma_collection(path=Config.VECTOR_STORE_DIR, name=room.collection_name)
+            db = load_chroma_collection(path=str(Config.VECTOR_STORE_DIR), name=room.collection_name)
             result = generate_answer(db=db, query=transcribed_text, chat_history=chat_history)
             response_content = result['answer']
             context = {
@@ -546,17 +555,17 @@ Remember to keep the tone friendly and conversational throughout! 😊
         
     finally:
         # Clean up temporary files
-        if temp_audio_path and os.path.exists(temp_audio_path):
+        if temp_audio_path and os.path.exists(str(temp_audio_path)):
             try:
                 os.unlink(temp_audio_path)
             except:
                 pass
-        if temp_wav_path and os.path.exists(temp_wav_path):
+        if temp_wav_path and os.path.exists(str(temp_wav_path)):
             try:
                 os.unlink(temp_wav_path)
             except:
                 pass
-        if response_audio_path and os.path.exists(response_audio_path):
+        if response_audio_path and os.path.exists(str(response_audio_path)):
             try:
                 os.unlink(response_audio_path)
             except:

@@ -17,6 +17,8 @@ A Flask-based chat application that combines Retrieval-Augmented Generation (RAG
 - 🤖 **Dual Chat Modes**: 
   - RAG mode for document-based conversations
   - Regular chat mode with Gemini for general conversations
+- 🔊 **Audio Feedback**: Get spoken responses from the AI
+- 📈 **Real-time Analysis**: Instant feedback on speech quality
 
 ## Prerequisites
 
@@ -32,6 +34,10 @@ A Flask-based chat application that combines Retrieval-Augmented Generation (RAG
   # Windows
   # Download from https://ffmpeg.org/download.html
   ```
+- Google Cloud account with:
+  - Speech-to-Text API enabled
+  - Text-to-Speech API enabled
+  - Generative AI API enabled
 
 ## Project Structure
 
@@ -58,6 +64,7 @@ flask-rag/
 ├── data/
 │   ├── documents/           # Uploaded PDF documents
 │   ├── vector_store/       # ChromaDB vector store
+│   ├── temp/              # Temporary files
 │   └── chat.db            # SQLite database
 ├── tests/                 # Unit tests
 ├── config.py             # Configuration settings
@@ -93,7 +100,7 @@ flask-rag/
 
 5. **Create Required Directories**
    ```bash
-   mkdir -p data/documents data/vector_store
+   mkdir -p data/documents data/vector_store data/temp
    ```
 
 6. **Initialize the Application**
@@ -106,11 +113,13 @@ flask-rag/
 1. **Creating a Chat Room**
    - Click "New Chat" to create a room
    - Optionally upload a document during creation
+   - Each room maintains its own conversation history
 
 2. **Document Upload**
    - Supported format: PDF
    - Documents are processed and indexed for retrieval
    - Each room can have its own document context
+   - Documents are stored in `data/documents/`
 
 3. **Chat Interactions**
    - Type or use voice input for questions
@@ -118,11 +127,23 @@ flask-rag/
      - Document-based answers (if documents are uploaded)
      - General responses (without documents)
      - Speech analysis (for voice input)
+   - Responses include:
+     - Brief answer to your question
+     - Speech analysis metrics
+     - Word-level pronunciation feedback
+     - Audio response (optional)
 
 4. **Voice Features**
    - Click the microphone icon to start voice input
-   - Receive detailed speech metrics
+   - Speak clearly into your microphone
+   - Receive detailed speech metrics including:
+     - Accuracy score
+     - Fluency score
+     - Pronunciation accuracy
+     - Word-by-word analysis
+     - Pitch analysis
    - Get AI-generated pronunciation feedback
+   - Listen to the AI's spoken response
 
 ## API Documentation
 
@@ -136,83 +157,72 @@ flask-rag/
 - `POST /api/rooms/<room_id>/voice_chat` - Send a voice message
 - `POST /api/rooms/<room_id>/upload` - Upload a document
 
-## Technical Details
+### Response Format
 
-### RAG Implementation
-- Uses ChromaDB for vector storage
-- Implements semantic chunking for better context
-- Optimized retrieval with relevance scoring
-
-### Speech Processing
-- Google Cloud Speech-to-Text for transcription
-- Custom pronunciation assessment
-- Real-time pitch analysis
-- Word-level evaluation
-
-### Data Storage
-- SQLite database for chat history (located at `data/chat.db`)
-- File-based storage for documents (in `data/documents/`)
-- Vector store for embeddings (in `data/vector_store/`)
-
-## Dependencies
-
-- Flask: Web framework
-- ChromaDB: Vector database
-- Google Cloud Services: Speech-to-Text, Text-to-Speech
-- Gemini: Language model for chat
-- PyPDF2: PDF processing
-- SQLAlchemy: Database ORM
-- FFmpeg: Audio processing
-- Python-magic: File type validation
-- Requests: HTTP client
-- Pytest: Testing framework
-
-## Browser Compatibility
-
-- Chrome 80+
-- Firefox 75+
-- Safari 13.1+
-- Edge 80+
-
-## Troubleshooting
-
-1. **Microphone Access Issues**
-   - Ensure browser has microphone permissions
-   - Check system microphone settings
-   - Try using a different browser
-
-2. **Document Upload Failures**
-   - Verify PDF file is not corrupted
-   - Check file size (max 10MB)
-   - Ensure proper file permissions
-
-3. **Speech Recognition Errors**
-   - Check internet connection
-   - Verify Google API key is valid
-   - Ensure FFmpeg is installed
-
-4. **Database Issues**
-   - Check write permissions in data directory
-   - Verify SQLite is properly installed
-   - Try clearing browser cache
+```json
+{
+    "transcription": "User's spoken text",
+    "content": "AI's response",
+    "role": "assistant",
+    "timestamp": "2024-03-21T10:00:00",
+    "context": {
+        "passages": ["relevant document excerpts"],
+        "metadata": {"source": "document_name"}
+    },
+    "speech_metrics": {
+        "accuracy": 95.5,
+        "completeness": 98.2,
+        "fluency": 92.3,
+        "pronunciation_accuracy": 96.7,
+        "speech_quality": 95.4,
+        "word_evaluation": ["word analysis details"],
+        "pitch_analysis": ["pitch details"],
+        "overall_pitch": 120.5
+    },
+    "response_audio": "base64_encoded_audio"
+}
+```
 
 ## Development
 
-1. **Running Tests**
-   ```bash
-   pytest tests/
-   ```
+### Running Tests
+```bash
+python -m pytest tests/
+```
 
-2. **Code Style**
-   - Follow PEP 8 guidelines
-   - Use type hints
-   - Document functions and classes
+### Code Style
+- Follow PEP 8 guidelines
+- Use type hints where possible
+- Document functions with docstrings
 
-3. **Adding Features**
-   - Create feature branch
-   - Write tests
-   - Update documentation
-   - Submit pull request
+### Deployment
+1. Set up a production server (e.g., Gunicorn)
+2. Configure environment variables
+3. Set up SSL certificate
+4. Configure reverse proxy (e.g., Nginx)
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Audio Processing Errors**
+   - Ensure FFmpeg is installed and in PATH
+   - Check microphone permissions
+   - Verify audio device selection
+
+2. **Document Processing Issues**
+   - Ensure PDF files are not corrupted
+   - Check file permissions
+   - Verify sufficient disk space
+
+3. **API Connection Problems**
+   - Verify Google API key
+   - Check internet connection
+   - Ensure API quotas are not exceeded
+
+### Logs
+- Application logs are stored in `logs/app.log`
+- Error logs are stored in `logs/error.log`
 
 ## Contributing
 
@@ -224,4 +234,11 @@ flask-rag/
 
 ## License
 
-This project is licensed under the GPL-3.0 License - see the [LICENSE](LICENSE) file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- Google Cloud Platform for speech and AI services
+- ChromaDB for vector storage
+- Flask for the web framework
+- All contributors and users of this project 
