@@ -190,20 +190,16 @@ def chat(room_id):
         
         user_message = data['message']
         
-        # Get relevant context based on the user's query
-        relevant_context = chat_manager.get_relevant_context(
-            room_id=room_id,
-            query=user_message,
-            limit=5
-        )
+        # Get the full chat history for this room
+        chat_history = chat_manager.get_room_history(room_id)
         
         # Format chat history for context
-        chat_history = [
+        formatted_history = [
             {
                 'role': msg.role,
-                'content': msg.content
+                'parts': [{'text': msg.content}]
             }
-            for msg in relevant_context
+            for msg in chat_history
         ]
         
         # Add user message
@@ -223,7 +219,7 @@ def chat(room_id):
             result = generate_answer(
                 db=db,
                 query=user_message,
-                chat_history=chat_history
+                chat_history=formatted_history
             )
             response_content = result['answer']
             context = {
@@ -234,7 +230,7 @@ def chat(room_id):
             # Use regular chat for rooms without documents
             # Format messages for Gemini
             model = genai.GenerativeModel('gemini-2.0-flash')
-            chat = model.start_chat()
+            chat = model.start_chat(history=formatted_history)
             
             # Add system message
             chat.send_message("""You are a friendly and engaging English language tutor. 
@@ -250,17 +246,13 @@ Remember to:
 - Use contractions (e.g., "you're" instead of "you are")
 - Keep the tone light and supportive""")
             
-            # Add chat history
-            for msg in chat_history:
-                chat.send_message(msg['content'])
-            
             # Send user message and get response
             response = chat.send_message(user_message)
             
             response_content = response.text
             # Include conversation context
             context = {
-                'conversation_history': chat_history,
+                'conversation_history': formatted_history,
                 'current_query': {
                     'content': user_message,
                     'timestamp': datetime.now().isoformat()
@@ -285,7 +277,6 @@ Remember to:
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 
 @api.route('/rooms/<int:room_id>/voice_chat', methods=['POST'])
 def voice_chat(room_id):
@@ -386,9 +377,17 @@ def voice_chat(room_id):
             (correct_pronunciation_percentage * 0.1)  # 10% weight to pronunciation
         )
 
-        # Process the transcribed text as a regular chat message
-        chat_history = chat_manager.get_relevant_context(room_id, transcribed_text, limit=5)
-        chat_history = [{'role': msg.role, 'content': msg.content} for msg in chat_history]
+        # Get the full chat history for this room
+        chat_history = chat_manager.get_room_history(room_id)
+        
+        # Format chat history for context
+        formatted_history = [
+            {
+                'role': msg.role,
+                'parts': [{'text': msg.content}]
+            }
+            for msg in chat_history
+        ]
 
         # Add user message with speech metrics
         chat_manager.add_message(
@@ -412,7 +411,7 @@ def voice_chat(room_id):
         # Generate response using existing logic
         if room.collection_name:
             db = load_chroma_collection(path=str(Config.VECTOR_STORE_DIR), name=room.collection_name)
-            result = generate_answer(db=db, query=transcribed_text, chat_history=chat_history)
+            result = generate_answer(db=db, query=transcribed_text, chat_history=formatted_history)
             response_content = result['answer']
             context = {
                 'passages': result['supporting_info']['passages'],
@@ -420,7 +419,9 @@ def voice_chat(room_id):
             }
         else:
             model = genai.GenerativeModel('gemini-2.0-flash')
-            chat = model.start_chat()
+            chat = model.start_chat(history=formatted_history)
+            
+            # Add system message
             chat.send_message("""You are a friendly and engaging English language tutor. 
 Your responses should be:
 1. Natural and conversational - like talking to a friend
@@ -434,87 +435,30 @@ Remember to:
 - Use contractions (e.g., "you're" instead of "you are")
 - Keep the tone light and supportive""")
             
-            for msg in chat_history:
-                chat.send_message(msg['content'])
-            
-            response = chat.send_message(f"""User said: {transcribed_text}
-Speech metrics:
-- Accuracy: {round(accuracy_score, 2)}%
-- Fluency: {round(fluency_score, 2)}%
-- Pronunciation: {round(correct_pronunciation_percentage, 2)}%
-- Overall Quality: {round(speech_quality, 2)}%
-
-Please provide a friendly, conversational response that includes:
-1. A brief answer to their question
-2. Feedback on their English speaking skills
-3. Specific suggestions for improvement
-
-Format your response in HTML with the following structure:
-
-<div class="brief-response-section">
-    <h3 class="text-lg font-semibold mb-2">Response</h3>
-    <div class="prose">
-        {generateBriefResponse(transcribed_text)}
-    </div>
-</div>
-
-<div class="feedback-section">
-    <h3 class="text-lg font-semibold mb-2">Speech Analysis</h3>
-    <div class="grid grid-cols-2 gap-2 mb-4">
-        <div class="bg-gray-50 p-2 rounded">
-            <div class="text-sm text-gray-500">Accuracy</div>
-            <div class="text-lg font-bold text-blue-600">{round(accuracy_score, 2)}%</div>
-        </div>
-        <div class="bg-gray-50 p-2 rounded">
-            <div class="text-sm text-gray-500">Fluency</div>
-            <div class="text-lg font-bold text-green-600">{round(fluency_score, 2)}%</div>
-        </div>
-        <div class="bg-gray-50 p-2 rounded">
-            <div class="text-sm text-gray-500">Pronunciation</div>
-            <div class="text-lg font-bold text-purple-600">{round(correct_pronunciation_percentage, 2)}%</div>
-        </div>
-        <div class="bg-gray-50 p-2 rounded">
-            <div class="text-sm text-gray-500">Overall Quality</div>
-            <div class="text-lg font-bold text-indigo-600">{round(speech_quality, 2)}%</div>
-        </div>
-    </div>
-    <div class="word-analysis bg-white p-3 rounded-lg shadow max-h-40 overflow-y-auto mb-4">
-        <h4 class="font-semibold mb-2">Word Analysis</h4>
-        {''.join([f'<div class="mb-2 p-2 rounded {("bg-green-50" if "error type: None" in eval else "bg-red-50")}">{eval}</div>' for eval in word_evaluation])}
-    </div>
-    <div class="feedback-content">
-        <h3 class="text-lg font-semibold mb-2">Feedback</h3>
-        <div class="prose">
-            {generateFeedback(accuracy_score, fluency_score, correct_pronunciation_percentage, speech_quality)}
-        </div>
-    </div>
-</div>
-
-Remember to keep the tone friendly and conversational throughout! 😊
-""")
+            # Send user message and get response
+            response = chat.send_message(transcribed_text)
             
             response_content = response.text
-            print("res", response_content)
             context = {
-                'conversation_history': chat_history,
+                'conversation_history': formatted_history,
                 'current_query': {
                     'content': transcribed_text,
                     'timestamp': datetime.now().isoformat()
                 }
             }
 
-        # Convert response to speech
-        try:
-            from app.core.tts import text_to_speech
-            text_for_speech = parseBotResponse(response_content)
-            text_to_speech('en-US-Standard-C', text_for_speech, str(response_audio_path))
+            # Convert response to speech
+            try:
+                from app.core.tts import text_to_speech
+                text_for_speech = parseBotResponse(response_content)
+                text_to_speech('en-US-Standard-C', text_for_speech, str(response_audio_path))
 
-            # Read response audio file and convert to base64
-            with open(response_audio_path, 'rb') as audio_file:
-                response_audio = base64.b64encode(audio_file.read()).decode('utf-8')
-        except Exception as e:
-            print(f"TTS error: {str(e)}")
-            response_audio = None
+                # Read response audio file and convert to base64
+                with open(response_audio_path, 'rb') as audio_file:
+                    response_audio = base64.b64encode(audio_file.read()).decode('utf-8')
+            except Exception as e:
+                print(f"TTS error: {str(e)}")
+                response_audio = None
 
         # Add assistant response
         response = chat_manager.add_message(
@@ -541,8 +485,6 @@ Remember to keep the tone friendly and conversational throughout! 😊
                 'overall_pitch': round(overall_pitch, 2)
             }
         }
-
-        print("result", result)
         
         if response_audio:
             result['response_audio'] = response_audio
@@ -570,3 +512,26 @@ Remember to keep the tone friendly and conversational throughout! 😊
                 os.unlink(response_audio_path)
             except:
                 pass
+
+@api.route('/rooms/<int:room_id>/recap', methods=['GET'])
+def recap(room_id):
+    messages = chat_manager.get_room_history(room_id)
+    # Filter for user messages with speech metrics
+    metrics = [msg.context.get('speech_metrics') for msg in messages if msg.role == 'user' and msg.context and 'speech_metrics' in msg.context]
+    if not metrics:
+        return jsonify({'error': 'No speech metrics found'}), 404
+
+    # Calculate averages or whatever summary you want
+    avg_accuracy = sum(m['accuracy'] for m in metrics) / len(metrics)
+    avg_fluency = sum(m['fluency'] for m in metrics) / len(metrics)
+    avg_pronunciation = sum(m['pronunciation_accuracy'] for m in metrics) / len(metrics)
+    avg_quality = sum(m['speech_quality'] for m in metrics) / len(metrics)
+
+    # You can add more stats as needed
+    return jsonify({
+        'average_accuracy': round(avg_accuracy, 2),
+        'average_fluency': round(avg_fluency, 2),
+        'average_pronunciation': round(avg_pronunciation, 2),
+        'average_quality': round(avg_quality, 2),
+        'total_messages': len(metrics)
+    })

@@ -46,8 +46,29 @@ def generateFeedback(accuracy_score, fluency_score, pronunciation_percentage, sp
     return "<br>".join(feedback)
 
 def generateBriefResponse(transcribed_text):
-    # This is a simple response generator. You can make it more sophisticated based on your needs.
-    return "I understand what you're saying. Please continue speaking to practice your English."
+    """Generate a brief, context-aware response to the user's speech.
+    
+    Args:
+        transcribed_text: The text transcribed from the user's speech
+        
+    Returns:
+        A brief, friendly response that acknowledges the user's input
+    """
+    # Check for common patterns in the transcribed text
+    text_lower = transcribed_text.lower()
+    
+    if any(word in text_lower for word in ['hello', 'hi', 'hey']):
+        return "Hello! I'm here to help you practice your English. How can I assist you today?"
+    elif any(word in text_lower for word in ['thank', 'thanks']):
+        return "You're welcome! I'm glad I could help. Feel free to continue practicing."
+    elif any(word in text_lower for word in ['help', 'assist']):
+        return "I'd be happy to help! What would you like to practice or discuss?"
+    elif any(word in text_lower for word in ['bye', 'goodbye']):
+        return "Goodbye! It was great practicing with you. Come back anytime!"
+    elif '?' in transcribed_text:
+        return "That's a great question! Let me help you with that."
+    else:
+        return "I understand what you're saying. Please continue speaking to practice your English."
 
 def parseBotResponse(html_string):
     soup = BeautifulSoup(html_string, 'html.parser')

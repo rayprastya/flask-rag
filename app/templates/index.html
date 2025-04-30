@@ -97,6 +97,21 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Feedback button -->
+            <div class="p-4 border-t border-gray-200">
+                <button id="showFeedbackBtn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    Show Feedback
+                </button>
+            </div>
+
+            <!-- Feedback recap section (hidden by default) -->
+            <div id="feedbackRecap" class="hidden p-4 border-t border-gray-200 bg-gray-50">
+                <h3 class="text-lg font-semibold mb-4">Feedback</h3>
+                <div id="feedbackContent" class="space-y-4">
+                    <!-- Feedback content will be added here -->
+                </div>
+            </div>
         </div>
     </div>
 
@@ -245,42 +260,63 @@
             }
         }
 
-        function addMessage(role, content, context = null) {
-            const messagesArea = document.getElementById('messagesArea');
+        function addMessage(role, content, sources = null) {
+            const chatArea = document.getElementById('messagesArea');
             const messageDiv = document.createElement('div');
-            messageDiv.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+            messageDiv.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-4`;
             
             const messageBubble = document.createElement('div');
-            messageBubble.className = `max-w-[70%] rounded-lg p-3 ${
-                role === 'user' ? 'bg-blue-500 text-white' : 'bg-white shadow'
+            messageBubble.className = `max-w-[70%] rounded-lg p-4 ${
+                role === 'user' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'bg-gray-100 text-gray-800'
             }`;
             
-            // For user messages, always use text content
-            if (role === 'user') {
-                messageBubble.textContent = content;
-            } else {
-                // For non-user messages, handle HTML if specified
-                if (context && context.isHtml) {
-                    messageBubble.innerHTML = content;
+            if (role === 'assistant') {
+                // For assistant messages, we need to handle HTML content
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = content;
+                
+                // Check if this is a feedback response
+                const feedbackSection = tempDiv.querySelector('.feedback-section');
+                const briefResponseSection = tempDiv.querySelector('.brief-response-section');
+                
+                if (feedbackSection && briefResponseSection) {
+                    // This is a feedback response, only show the brief response
+                    messageBubble.innerHTML = briefResponseSection.innerHTML;
+                    
+                    // Extract feedback metrics from the feedback section
+                    const feedbackMetrics = {
+                        accuracy: feedbackSection.querySelector('.text-blue-600')?.textContent?.replace('%', '') || '0',
+                        fluency: feedbackSection.querySelector('.text-green-600')?.textContent?.replace('%', '') || '0',
+                        pronunciation_accuracy: feedbackSection.querySelector('.text-purple-600')?.textContent?.replace('%', '') || '0',
+                        speech_quality: feedbackSection.querySelector('.text-indigo-600')?.textContent?.replace('%', '') || '0',
+                        word_evaluation: Array.from(feedbackSection.querySelectorAll('.word-analysis div')).map(div => div.textContent),
+                        pitch_analysis: Array.from(feedbackSection.querySelectorAll('.feedback-content div')).map(div => div.textContent)
+                    };
+                    
+                    // Update the feedback recap section
+                    updateFeedbackContent(feedbackMetrics);
                 } else {
-                    messageBubble.textContent = content;
+                    // Regular message, show as is
+                    messageBubble.innerHTML = content;
                 }
                 
                 // Add sources if available
-                if (context && context.passages) {
+                if (sources) {
                     const sourcesDiv = document.createElement('div');
-                    sourcesDiv.className = 'mt-2 text-sm text-gray-500';
-                    sourcesDiv.innerHTML = '<strong>Sources:</strong><br>' + 
-                        context.passages.map((p, i) => 
-                            `[${(context.metadata[i].relevance_score * 100).toFixed(1)}%] ${p.substring(0, 100)}...`
-                        ).join('<br>');
+                    sourcesDiv.className = 'mt-2 text-sm text-gray-600';
+                    sourcesDiv.innerHTML = `<strong>Sources:</strong> ${sources}`;
                     messageBubble.appendChild(sourcesDiv);
                 }
+            } else {
+                // User message, just show the text
+                messageBubble.textContent = content;
             }
             
             messageDiv.appendChild(messageBubble);
-            messagesArea.appendChild(messageDiv);
-            messagesArea.scrollTop = messagesArea.scrollHeight;
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
         }
 
         async function selectRoom(roomId) {
@@ -301,29 +337,38 @@
             
             // Process each message
             messages.forEach(msg => {
-                if (msg.role === 'assistant' && msg.content.includes('<div class="feedback-section">')) {
-                    // Split AI response into feedback and brief response
-                    const [feedback, briefResponse] = splitResponse(msg.content);
+                if (msg.role === 'assistant') {
+                    // For assistant messages, we need to handle HTML content
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = msg.content;
                     
-                    // Add feedback message with HTML content
-                    addMessage('assistant', feedback, {
-                        type: 'feedback',
-                        isHtml: true
-                    });
+                    // Check if this is a feedback response
+                    const feedbackSection = tempDiv.querySelector('.feedback-section');
+                    const briefResponseSection = tempDiv.querySelector('.brief-response-section');
                     
-                    // Add brief response message with HTML content if it exists
-                    if (briefResponse) {
-                        addMessage('assistant', briefResponse, {
-                            type: 'brief_response',
-                            isHtml: true
-                        });
+                    if (feedbackSection && briefResponseSection) {
+                        // This is a feedback response, only show the brief response in chat
+                        addMessage('assistant', briefResponseSection.innerHTML);
+                        
+                        // Extract feedback metrics from the feedback section
+                        const feedbackMetrics = {
+                            accuracy: feedbackSection.querySelector('.text-blue-600')?.textContent?.replace('%', '') || '0',
+                            fluency: feedbackSection.querySelector('.text-green-600')?.textContent?.replace('%', '') || '0',
+                            pronunciation_accuracy: feedbackSection.querySelector('.text-purple-600')?.textContent?.replace('%', '') || '0',
+                            speech_quality: feedbackSection.querySelector('.text-indigo-600')?.textContent?.replace('%', '') || '0',
+                            word_evaluation: Array.from(feedbackSection.querySelectorAll('.word-analysis div')).map(div => div.textContent),
+                            pitch_analysis: Array.from(feedbackSection.querySelectorAll('.feedback-content div')).map(div => div.textContent)
+                        };
+                        
+                        // Update the feedback recap section with the latest feedback
+                        updateFeedbackContent(feedbackMetrics);
+                    } else {
+                        // Regular message, show as is
+                        addMessage('assistant', msg.content);
                     }
                 } else {
-                    // Handle regular messages
-                    addMessage(msg.role, msg.content, {
-                        ...msg.context,
-                        isHtml: msg.content.startsWith('<div') || (msg.context && msg.context.isHtml)
-                    });
+                    // User message, just show the text
+                    addMessage(msg.role, msg.content);
                 }
             });
 
@@ -507,24 +552,37 @@
                             return;
                         }
                         
-                        // Add user's transcribed message (only the text)
-                        addMessage('user', data.transcription || data.content);
+                        // Add user's transcribed message
+                        addMessage('user', data.transcription);
                         
-                        // Split AI response into feedback and brief response
-                        const responseText = data.response || data.content;
-                        const [feedback, briefResponse] = splitResponse(responseText);
+                        // For assistant response, we need to handle HTML content
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = data.content;
                         
-                        // Add feedback message with HTML content
-                        addMessage('assistant', feedback, {
-                            type: 'feedback',
-                            isHtml: true
-                        });
+                        // Check if this is a feedback response
+                        const feedbackSection = tempDiv.querySelector('.feedback-section');
+                        const briefResponseSection = tempDiv.querySelector('.brief-response-section');
                         
-                        // Add brief response message with HTML content
-                        addMessage('assistant', briefResponse, {
-                            type: 'brief_response',
-                            isHtml: true
-                        });
+                        if (feedbackSection && briefResponseSection) {
+                            // This is a feedback response, only show the brief response in chat
+                            addMessage('assistant', briefResponseSection.innerHTML);
+                            
+                            // Extract feedback metrics from the feedback section
+                            const feedbackMetrics = {
+                                accuracy: feedbackSection.querySelector('.text-blue-600')?.textContent?.replace('%', '') || '0',
+                                fluency: feedbackSection.querySelector('.text-green-600')?.textContent?.replace('%', '') || '0',
+                                pronunciation_accuracy: feedbackSection.querySelector('.text-purple-600')?.textContent?.replace('%', '') || '0',
+                                speech_quality: feedbackSection.querySelector('.text-indigo-600')?.textContent?.replace('%', '') || '0',
+                                word_evaluation: Array.from(feedbackSection.querySelectorAll('.word-analysis div')).map(div => div.textContent),
+                                pitch_analysis: Array.from(feedbackSection.querySelectorAll('.feedback-content div')).map(div => div.textContent)
+                            };
+                            
+                            // Update the feedback recap section with the latest feedback
+                            updateFeedbackContent(feedbackMetrics);
+                        } else {
+                            // Regular message, show as is
+                            addMessage('assistant', data.content);
+                        }
                         
                         // Add audio control if response audio is available
                         if (data.response_audio) {
@@ -567,6 +625,95 @@
             }
             
             return [feedback, briefResponse];
+        }
+
+        // Add feedback button click handler
+        document.getElementById('showFeedbackBtn').addEventListener('click', async () => {
+            const feedbackRecap = document.getElementById('feedbackRecap');
+            const feedbackContent = document.getElementById('feedbackContent');
+            
+            if (feedbackRecap.classList.contains('hidden')) {
+                // Show feedback recap
+                feedbackRecap.classList.remove('hidden');
+                document.getElementById('showFeedbackBtn').textContent = 'Hide Feedback Recap';
+                
+                // If there's no feedback content yet, show a message
+                if (!feedbackContent.innerHTML.trim()) {
+                    feedbackContent.innerHTML = `
+                        <div class="text-center text-gray-500">
+                            No feedback available yet. Send a voice message to get feedback.
+                        </div>
+                    `;
+                }
+            } else {
+                // Hide feedback recap
+                feedbackRecap.classList.add('hidden');
+                document.getElementById('showFeedbackBtn').textContent = 'Show Feedback Recap';
+            }
+        });
+
+        // Function to update feedback content
+        function updateFeedbackContent(metrics) {
+            const feedbackContent = document.getElementById('feedbackContent');
+            
+            if (!metrics) {
+                feedbackContent.innerHTML = `
+                    <div class="text-center text-gray-500">
+                        No feedback available yet. Send a voice message to get feedback.
+                    </div>
+                `;
+                return;
+            }
+
+            // Extract scores from the metrics
+            const accuracy = metrics.accuracy || '0';
+            const fluency = metrics.fluency || '0';
+            const pronunciation = metrics.pronunciation_accuracy || '0';
+            const quality = metrics.speech_quality || '0';
+            
+            // Create word analysis HTML
+            const wordAnalysis = metrics.word_evaluation ? metrics.word_evaluation.map(eval => {
+                const isCorrect = eval.includes('error type: None');
+                return `<div class="mb-2 p-2 rounded ${isCorrect ? 'bg-green-50' : 'bg-red-50'}">${eval}</div>`;
+            }).join('') : '';
+            
+            // Create pitch analysis HTML
+            const pitchAnalysis = metrics.pitch_analysis ? metrics.pitch_analysis.map(pitch => 
+                `<div class="text-sm">${pitch}</div>`
+            ).join('') : '';
+            
+            feedbackContent.innerHTML = `
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h4 class="font-semibold mb-2">Accuracy</h4>
+                        <div class="text-2xl font-bold text-blue-600">${accuracy}%</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h4 class="font-semibold mb-2">Fluency</h4>
+                        <div class="text-2xl font-bold text-green-600">${fluency}%</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h4 class="font-semibold mb-2">Pronunciation</h4>
+                        <div class="text-2xl font-bold text-purple-600">${pronunciation}%</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h4 class="font-semibold mb-2">Overall Quality</h4>
+                        <div class="text-2xl font-bold text-indigo-600">${quality}%</div>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <h4 class="font-semibold mb-2">Word Analysis</h4>
+                    <div class="bg-white p-4 rounded-lg shadow max-h-40 overflow-y-auto">
+                        ${wordAnalysis}
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <h4 class="font-semibold mb-2">Pitch Analysis</h4>
+                    <div class="bg-white p-4 rounded-lg shadow max-h-40 overflow-y-auto">
+                        ${pitchAnalysis}
+                    </div>
+                </div>
+            `;
         }
 
         // Initialize the page
