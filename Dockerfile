@@ -1,17 +1,17 @@
 # Use official Python base image
-FROM python:3.12-slim
+FROM python:3.10-slim
 
-# Set working directory
+# Set work directory
 WORKDIR /app
 
-# Copy project files
+# Copy files
 COPY . /app
 
 # Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Expose the port your app will run on
-EXPOSE 8001
+# Expose the port your app runs on
+EXPOSE 5000
 
 # Start the app using Gunicorn
-CMD ["gunicorn", "-w", "3", "-b", "0.0.0.0:8001", "app:create_app()"]
+CMD ["gunicorn", "-w", "3", "-b", "0.0.0.0:5000", "app:create_app()"]
