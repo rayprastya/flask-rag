@@ -14,4 +14,4 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY . .
 
-CMD ["gunicorn", "--factory", "-w", "3", "-b", "0.0.0.0:9000", "app:create_app"]
+CMD ["gunicorn", "--workers", "3", "--bind", "0.0.0.0:9000", "app:create_app()"]
