@@ -14,6 +14,5 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY . .
 
-# Use shell form to call factory
-CMD ["gunicorn", "--factory", "-w", "3", "-b", "0.0.0.0:5000", "app:create_app"]
+CMD ["gunicorn", "-w", "3", "-b", "0.0.0.0:5000", "app:create_app"]
 
