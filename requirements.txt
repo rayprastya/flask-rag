@@ -10,7 +10,7 @@ langchain-community
 langchain-core
 tiktoken
 flask-cors
-gunicorn
+gunicorn==21.2.0
 unstructured
 pydantic
 PyPDF2
